@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const CodeInteraction = require('../models/CodeInteraction');
 const logger = require('../utils/logger');
 require('dotenv').config();
-console.log('GOOGLE_GEMINI_KEY:', process.env.GOOGLE_GEMINI_KEY);
+
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
 const model = genAI.getGenerativeModel({
     model: "gemini-2.0-flash",
@@ -10,19 +10,19 @@ const model = genAI.getGenerativeModel({
                 AI System Instruction: Senior Code Reviewer with a Sense of Humor
 
                 Role & Style:
-                You are a senior code reviewer (7+ years of experience) with deep technical knowledge, but you never start reviews dry. Your reviews always begin with a playful roast about the developer or their code, delivered in a humorous, lighthearted way. This roast sets the stage, but it should never be offensive — think witty banter that makes the developer smile while realizing “oh yeah, that’s true.”
+                You are a senior code reviewer (7+ years of experience) with deep technical knowledge, but you never start reviews dry. Your reviews always begin with a playful roast about the developer or their code, delivered in a humorous, lighthearted way. This roast sets the stage, but it should never be offensive — think witty banter that makes the developer smile while realizing "oh yeah, that's true."
 
                 Review Structure:
                 1. **Roast (Introduction)**  
-                - Start with 2–3 playful sentences mocking the code or developer’s approach.  
-                - Keep it funny, clever, and context-aware (e.g., “This code looks like it was written by a developer running on 2% battery and 10% coffee.”).  
+                - Start with 2–3 playful sentences mocking the code or developer's approach.  
+                - Keep it funny, clever, and context-aware (e.g., "This code looks like it was written by a developer running on 2% battery and 10% coffee.").  
                 - The roast should break the ice and hook the reader.  
 
                 2. **Suggestions for Improvement (Main Section)**  
                 - Provide a structured, detailed list of feedback.  
                 - Cover: code quality, performance, security, maintainability, best practices, readability, scalability, and testing.  
                 - Each suggestion should include:  
-                    - What’s wrong or could be better.  
+                    - What's wrong or could be better.  
                     - Why it matters in the real world.  
                     - A concrete recommendation or example fix.  
                 - This section should form the bulk of the review (like an in-depth code audit).  
@@ -52,7 +52,7 @@ const model = genAI.getGenerativeModel({
                 Example Flow (not literal text, just structure):
                 ---
                 🔥 Roast:  
-                “Looking at this code feels like finding spaghetti in a production server. I can’t decide if I should grab a fork or start debugging.”  
+                "Looking at this code feels like finding spaghetti in a production server. I can't decide if I should grab a fork or start debugging."  
 
                 🔍 Suggestions:  
                 - Point 1 (with why + fix)  
@@ -60,51 +60,96 @@ const model = genAI.getGenerativeModel({
                 - …  
 
                 💎 Appreciation:  
-                - “The naming here is surprisingly intuitive — that’s a win.”  
-                - “I like how you modularized this section.”  
+                - "The naming here is surprisingly intuitive — that's a win."  
+                - "I like how you modularized this section."  
 
                 🚀 Wrap-up:  
-                “You’ve got the foundation of a strong developer. With these improvements, your code will shine like a polished gem. Keep building, keep learning — you’re closer to mastery than you think.”  
+                "You've got the foundation of a strong developer. With these improvements, your code will shine like a polished gem. Keep building, keep learning — you're closer to mastery than you think."  
                 
     `
 });
 
-
-async function generateContent(prompt, userIP, userAgent = '', sessionId = '') {
+// Streaming response generator
+async function* generateContentStream(prompt, userIP, userAgent = '', sessionId = '') {
     const startTime = Date.now();
+    let fullResponse = '';
+    let chunksCount = 0;
     
-    logger.logAIOperation('generateContent', {
+    logger.logAIOperation('generateContentStream_start', {
         userIP,
         sessionId,
         promptLength: prompt.length,
-        userAgent: userAgent.substring(0, 100) // Limit user agent length in logs
+        userAgent: userAgent.substring(0, 100)
     });
     
     try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        const result = await model.generateContentStream(prompt);
+        
+        for await (const chunk of result.stream) {
+            try {
+                const chunkText = chunk.text();
+                fullResponse += chunkText;
+                chunksCount++;
+                
+                logger.debug('Streaming chunk generated', {
+                    userIP,
+                    sessionId,
+                    chunkNumber: chunksCount,
+                    chunkSize: chunkText.length,
+                    totalSize: fullResponse.length
+                });
+                
+                // Yield chunk data with metadata
+                yield {
+                    type: 'chunk',
+                    data: chunkText,
+                    timestamp: Date.now()
+                };
+            } catch (chunkError) {
+                logger.error('Error processing stream chunk', {
+                    userIP,
+                    sessionId,
+                    chunkNumber: chunksCount,
+                    error: chunkError.message,
+                    stack: chunkError.stack
+                });
+                
+                yield {
+                    type: 'error',
+                    data: {
+                        error: 'Chunk processing failed',
+                        message: chunkError.message,
+                        sessionId: sessionId
+                    },
+                    timestamp: Date.now()
+                };
+            }
+        }
+        
         const responseTime = Date.now() - startTime;
-
-        logger.logAIOperation('generateContent_success', {
+        
+        logger.logAIOperation('generateContentStream_complete', {
             userIP,
             sessionId,
             responseTime,
-            responseLength: response.length
+            responseLength: fullResponse.length,
+            chunksCount
         });
-
-        // Save to database
+        
+        // Save complete interaction to database
         try {
-            logger.logDatabaseOperation('save', 'code_interactions', {
+            logger.logDatabaseOperation('save_streaming', 'code_interactions', {
                 userIP,
                 sessionId,
                 promptLength: prompt.length,
-                responseLength: response.length,
-                responseTime
+                responseLength: fullResponse.length,
+                responseTime,
+                chunksCount
             });
 
             const codeInteraction = new CodeInteraction({
                 userCode: prompt,
-                aiResponse: response,
+                aiResponse: fullResponse,
                 userIP: userIP,
                 userAgent: userAgent,
                 responseTime: responseTime,
@@ -114,25 +159,62 @@ async function generateContent(prompt, userIP, userAgent = '', sessionId = '') {
 
             await codeInteraction.save();
             
-            logger.logDatabaseOperation('save_success', 'code_interactions', {
+            logger.logDatabaseOperation('save_streaming_success', 'code_interactions', {
                 userIP,
                 sessionId,
                 documentId: codeInteraction._id
             });
             
+            // Yield completion signal
+            yield {
+                type: 'complete',
+                data: {
+                    sessionId: sessionId,
+                    responseTime: responseTime,
+                    totalLength: fullResponse.length,
+                    chunksCount: chunksCount,
+                    saved: true
+                },
+                timestamp: Date.now()
+            };
+            
         } catch (dbError) {
-            logger.logDatabaseError('save', 'code_interactions', dbError);
-            // Don't fail the request if database save fails
+            logger.logDatabaseError('save_streaming', 'code_interactions', dbError);
+            
+            yield {
+                type: 'complete',
+                data: {
+                    sessionId: sessionId,
+                    responseTime: responseTime,
+                    totalLength: fullResponse.length,
+                    chunksCount: chunksCount,
+                    saved: false,
+                    error: dbError.message
+                },
+                timestamp: Date.now()
+            };
         }
-
-        return response;
+        
     } catch (error) {
-        logger.logAIError('generateContent', error, {
+        logger.logAIError('generateContentStream', error, {
             userIP,
             sessionId,
             promptLength: prompt.length,
-            responseTime: Date.now() - startTime
+            responseTime: Date.now() - startTime,
+            chunksGenerated: chunksCount,
+            partialResponseLength: fullResponse.length
         });
+        
+        yield {
+            type: 'error',
+            data: {
+                error: error.message,
+                sessionId: sessionId,
+                chunksGenerated: chunksCount,
+                partialResponseLength: fullResponse.length
+            },
+            timestamp: Date.now()
+        };
         throw error;
     }
 }
@@ -162,4 +244,4 @@ function detectCodeLanguage(code) {
     return 'unknown';
 }
 
-module.exports = generateContent    
+module.exports = { generateContentStream };
