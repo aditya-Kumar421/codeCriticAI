@@ -5,16 +5,11 @@ const streamingRoutes = require('./routes/ai.streaming.routes');
 const adminRoutes = require('./routes/admin.routes');
 const cors = require('cors');
 const connectDB = require('./config/database');
-const logger = require('./utils/logger');
-const { requestLogger } = require('./middleware/logging');
 
 const app = express();
 
 // Connect to MongoDB
 connectDB();
-
-// Logging middleware (should be early in the middleware stack)
-app.use(requestLogger);
 
 app.use(cors());
 
@@ -27,14 +22,10 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json())
 
 // Log application startup
-logger.info('CodeCritic AI Application Starting', {
-    nodeVersion: process.version,
-    platform: process.platform,
-    environment: process.env.NODE_ENV || 'development'
-});
+console.log(`CodeCritic AI Application Starting - NodeVersion: ${process.version}, Platform: ${process.platform}, Environment: ${process.env.NODE_ENV || 'development'}`);
 
 app.get('/', (req, res) => {
-    logger.info('Root endpoint accessed', { ip: req.ip });
+    console.log(`Root endpoint accessed - IP: ${req.ip}`);
     res.send('Hello, World! CodeCritic AI is running.');
 });
 

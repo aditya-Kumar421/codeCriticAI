@@ -1,6 +1,5 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const CodeInteraction = require('../models/CodeInteraction');
-const logger = require('../utils/logger');
 require('dotenv').config();
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
@@ -75,12 +74,7 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
     let fullResponse = '';
     let chunksCount = 0;
     
-    logger.logAIOperation('generateContentStream_start', {
-        userIP,
-        sessionId,
-        promptLength: prompt.length,
-        userAgent: userAgent.substring(0, 100)
-    });
+    console.log('Starting streaming AI request:', { userIP, sessionId, promptLength: prompt.length });
     
     try {
         const result = await model.generateContentStream(prompt);
@@ -91,14 +85,6 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
                 fullResponse += chunkText;
                 chunksCount++;
                 
-                logger.debug('Streaming chunk generated', {
-                    userIP,
-                    sessionId,
-                    chunkNumber: chunksCount,
-                    chunkSize: chunkText.length,
-                    totalSize: fullResponse.length
-                });
-                
                 // Yield chunk data with metadata
                 yield {
                     type: 'chunk',
@@ -106,13 +92,7 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
                     timestamp: Date.now()
                 };
             } catch (chunkError) {
-                logger.error('Error processing stream chunk', {
-                    userIP,
-                    sessionId,
-                    chunkNumber: chunksCount,
-                    error: chunkError.message,
-                    stack: chunkError.stack
-                });
+                console.error('Error processing stream chunk:', chunkError.message, { userIP, sessionId, chunkNumber: chunksCount });
                 
                 yield {
                     type: 'error',
@@ -128,24 +108,11 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
         
         const responseTime = Date.now() - startTime;
         
-        logger.logAIOperation('generateContentStream_complete', {
-            userIP,
-            sessionId,
-            responseTime,
-            responseLength: fullResponse.length,
-            chunksCount
-        });
+        console.log('Streaming AI request completed:', { userIP, sessionId, responseTime, responseLength: fullResponse.length, chunksCount });
         
         // Save complete interaction to database
         try {
-            logger.logDatabaseOperation('save_streaming', 'code_interactions', {
-                userIP,
-                sessionId,
-                promptLength: prompt.length,
-                responseLength: fullResponse.length,
-                responseTime,
-                chunksCount
-            });
+            console.log('Saving streaming interaction to database:', { userIP, sessionId, responseTime, chunksCount });
 
             const codeInteraction = new CodeInteraction({
                 userCode: prompt,
@@ -159,11 +126,7 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
 
             await codeInteraction.save();
             
-            logger.logDatabaseOperation('save_streaming_success', 'code_interactions', {
-                userIP,
-                sessionId,
-                documentId: codeInteraction._id
-            });
+            console.log('Streaming database save successful:', { userIP, sessionId, documentId: codeInteraction._id });
             
             // Yield completion signal
             yield {
@@ -179,7 +142,7 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
             };
             
         } catch (dbError) {
-            logger.logDatabaseError('save_streaming', 'code_interactions', dbError);
+            console.error('Streaming database save error:', dbError.message);
             
             yield {
                 type: 'complete',
@@ -196,14 +159,7 @@ async function* generateContentStream(prompt, userIP, userAgent = '', sessionId 
         }
         
     } catch (error) {
-        logger.logAIError('generateContentStream', error, {
-            userIP,
-            sessionId,
-            promptLength: prompt.length,
-            responseTime: Date.now() - startTime,
-            chunksGenerated: chunksCount,
-            partialResponseLength: fullResponse.length
-        });
+        console.error('Streaming AI generation error:', error.message, { userIP, sessionId, responseTime: Date.now() - startTime, chunksGenerated: chunksCount });
         
         yield {
             type: 'error',

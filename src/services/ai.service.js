@@ -1,6 +1,5 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const CodeInteraction = require('../models/CodeInteraction');
-const logger = require('../utils/logger');
 require('dotenv').config();
 console.log('GOOGLE_GEMINI_KEY:', process.env.GOOGLE_GEMINI_KEY);
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
@@ -73,34 +72,18 @@ const model = genAI.getGenerativeModel({
 async function generateContent(prompt, userIP, userAgent = '', sessionId = '') {
     const startTime = Date.now();
     
-    logger.logAIOperation('generateContent', {
-        userIP,
-        sessionId,
-        promptLength: prompt.length,
-        userAgent: userAgent.substring(0, 100) // Limit user agent length in logs
-    });
+    console.log('Processing AI request:', { userIP, sessionId, promptLength: prompt.length });
     
     try {
         const result = await model.generateContent(prompt);
         const response = result.response.text();
         const responseTime = Date.now() - startTime;
 
-        logger.logAIOperation('generateContent_success', {
-            userIP,
-            sessionId,
-            responseTime,
-            responseLength: response.length
-        });
+        console.log('AI generation successful:', { userIP, sessionId, responseTime, responseLength: response.length });
 
         // Save to database
         try {
-            logger.logDatabaseOperation('save', 'code_interactions', {
-                userIP,
-                sessionId,
-                promptLength: prompt.length,
-                responseLength: response.length,
-                responseTime
-            });
+            console.log('Saving to database:', { userIP, sessionId, promptLength: prompt.length, responseTime });
 
             const codeInteraction = new CodeInteraction({
                 userCode: prompt,
@@ -114,25 +97,16 @@ async function generateContent(prompt, userIP, userAgent = '', sessionId = '') {
 
             await codeInteraction.save();
             
-            logger.logDatabaseOperation('save_success', 'code_interactions', {
-                userIP,
-                sessionId,
-                documentId: codeInteraction._id
-            });
+            console.log('Database save successful:', { userIP, sessionId, documentId: codeInteraction._id });
             
         } catch (dbError) {
-            logger.logDatabaseError('save', 'code_interactions', dbError);
+            console.error('Database save error:', dbError.message);
             // Don't fail the request if database save fails
         }
 
         return response;
     } catch (error) {
-        logger.logAIError('generateContent', error, {
-            userIP,
-            sessionId,
-            promptLength: prompt.length,
-            responseTime: Date.now() - startTime
-        });
+        console.error('AI generation error:', error.message, { userIP, sessionId, promptLength: prompt.length });
         throw error;
     }
 }

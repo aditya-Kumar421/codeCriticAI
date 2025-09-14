@@ -1,63 +1,27 @@
-const logger = require('../utils/logger');
+/*
+ * LOGGING MIDDLEWARE - DISABLED
+ * This file has been simplified as per user request to remove logger dependency.
+ * Application now uses console.log and console.error for basic logging.
+ * This middleware provides minimal functionality.
+ */
 
-// Middleware to log all requests and responses
+// Simplified request logger - basic console logging
 const requestLogger = (req, res, next) => {
-    const startTime = Date.now();
-    const endpoint = `${req.method} ${req.path}`;
-    
-    // Log incoming request
-    logger.logRequest(req, endpoint);
-    
-    // Capture the original res.json and res.send methods
-    const originalJson = res.json;
-    const originalSend = res.send;
-    
-    // Override res.json to log responses
-    res.json = function(data) {
-        const duration = Date.now() - startTime;
-        logger.logResponse(req, res, endpoint, duration);
-        return originalJson.call(this, data);
-    };
-    
-    // Override res.send to log responses
-    res.send = function(data) {
-        const duration = Date.now() - startTime;
-        logger.logResponse(req, res, endpoint, duration);
-        return originalSend.call(this, data);
-    };
-    
-    // Handle cases where response ends without json/send
-    res.on('finish', () => {
-        if (!res._logged) {
-            const duration = Date.now() - startTime;
-            logger.logResponse(req, res, endpoint, duration);
-            res._logged = true;
-        }
-    });
-    
+    console.log(`${req.method} ${req.path} - IP: ${req.ip}`);
     next();
 };
 
-// Error handling middleware
+// Simplified error logger
 const errorLogger = (error, req, res, next) => {
-    const duration = Date.now() - req.startTime;
-    const endpoint = `${req.method} ${req.path}`;
-    
-    logger.logResponse(req, res, endpoint, duration, error);
-    
-    // Don't call next() here to avoid infinite loops
-    // The actual error response should be handled by individual controllers
+    console.error(`Error on ${req.method} ${req.path}:`, error.message);
+    next();
 };
 
-// Async error wrapper
+// Simplified async error handler
 const asyncErrorHandler = (fn) => {
     return (req, res, next) => {
-        req.startTime = Date.now();
         Promise.resolve(fn(req, res, next)).catch((error) => {
-            const duration = Date.now() - req.startTime;
-            const endpoint = `${req.method} ${req.path}`;
-            
-            logger.logResponse(req, res, endpoint, duration, error);
+            console.error(`Async error on ${req.method} ${req.path}:`, error.message);
             
             // Send error response if headers haven't been sent
             if (!res.headersSent) {

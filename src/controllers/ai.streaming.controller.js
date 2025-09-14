@@ -1,5 +1,4 @@
 const { generateContentStream } = require('../services/ai.streaming.service');
-const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 
 // Helper function to get user IP
@@ -15,17 +14,14 @@ function getUserIP(req) {
 // Streaming response controller
 module.exports.getStreamingResponse = async (req, res) => {
     const requestId = uuidv4();
-    logger.info('Processing streaming AI request', { requestId, endpoint: 'POST /ai/stream' });
+    console.log(`Processing streaming AI request - RequestId: ${requestId}, Endpoint: POST /ai/stream`);
     
     try {
         const code = req.body.prompt;
 
         if (!code) {
-            logger.warn('Invalid streaming request: missing prompt', { 
-                requestId,
-                userIP: getUserIP(req),
-                body: req.body 
-            });
+            const userIP = getUserIP(req);
+            console.log(`Invalid streaming request: missing prompt - RequestId: ${requestId}, UserIP: ${userIP}, Body:`, req.body);
             
             return res.status(400).json({ 
                 success: false,
@@ -40,13 +36,7 @@ module.exports.getStreamingResponse = async (req, res) => {
         const userAgent = req.headers['user-agent'] || '';
         const sessionId = req.headers['x-session-id'] || req.body.sessionId || uuidv4();
 
-        logger.info('Processing streaming code analysis', {
-            requestId,
-            userIP,
-            sessionId,
-            codeLength: code.length,
-            userAgent: userAgent.substring(0, 100)
-        });
+        console.log(`Processing streaming code analysis - RequestId: ${requestId}, UserIP: ${userIP}, SessionId: ${sessionId}, CodeLength: ${code.length}, UserAgent: ${userAgent.substring(0, 100)}`);
 
         // Set headers for Server-Sent Events
         res.writeHead(200, {
@@ -57,7 +47,7 @@ module.exports.getStreamingResponse = async (req, res) => {
             'Access-Control-Allow-Headers': 'Cache-Control'
         });
 
-        logger.debug('SSE headers set, starting stream', { requestId, sessionId });
+        console.log(`SSE headers set, starting stream - RequestId: ${requestId}, SessionId: ${sessionId}`);
 
         // Send initial connection confirmation
         res.write(`data: ${JSON.stringify({
@@ -74,12 +64,7 @@ module.exports.getStreamingResponse = async (req, res) => {
             for await (const chunk of generateContentStream(code, userIP, userAgent, sessionId)) {
                 chunksStreamed++;
                 
-                logger.debug('Streaming chunk to client', {
-                    requestId,
-                    sessionId,
-                    chunkNumber: chunksStreamed,
-                    chunkType: chunk.type
-                });
+                console.log(`Streaming chunk to client - RequestId: ${requestId}, SessionId: ${sessionId}, ChunkNumber: ${chunksStreamed}, ChunkType: ${chunk.type}`);
                 
                 // Send chunk as Server-Sent Event
                 res.write(`data: ${JSON.stringify({
@@ -89,23 +74,13 @@ module.exports.getStreamingResponse = async (req, res) => {
                 
                 // If it's a completion or error, we can close
                 if (chunk.type === 'complete' || chunk.type === 'error') {
-                    logger.info('Stream completed', {
-                        requestId,
-                        sessionId,
-                        chunksStreamed,
-                        completionType: chunk.type
-                    });
+                    console.log(`Stream completed - RequestId: ${requestId}, SessionId: ${sessionId}, ChunksStreamed: ${chunksStreamed}, CompletionType: ${chunk.type}`);
                     break;
                 }
             }
         } catch (streamError) {
-            logger.error('Streaming generation error', {
-                requestId,
-                sessionId,
-                chunksStreamed,
-                error: streamError.message,
-                stack: streamError.stack
-            });
+            console.error(`Streaming generation error - RequestId: ${requestId}, SessionId: ${sessionId}, ChunksStreamed: ${chunksStreamed}, Error: ${streamError.message}`);
+            console.error(`Stack trace:`, streamError.stack);
             
             res.write(`data: ${JSON.stringify({
                 type: 'error',
@@ -122,20 +97,12 @@ module.exports.getStreamingResponse = async (req, res) => {
         res.write('data: [DONE]\n\n');
         res.end();
         
-        logger.success('Streaming request completed successfully', {
-            requestId,
-            sessionId,
-            totalChunks: chunksStreamed
-        });
+        console.log(`Streaming request completed successfully - RequestId: ${requestId}, SessionId: ${sessionId}, TotalChunks: ${chunksStreamed}`);
 
     } catch (error) {
-        logger.error('Streaming controller error', {
-            requestId,
-            error: error.message,
-            stack: error.stack,
-            userIP: getUserIP(req),
-            endpoint: 'POST /ai/stream'
-        });
+        const userIP = getUserIP(req);
+        console.error(`Streaming controller error - RequestId: ${requestId}, Error: ${error.message}, UserIP: ${userIP}, Endpoint: POST /ai/stream`);
+        console.error(`Stack trace:`, error.stack);
         
         // If headers haven't been sent yet, send error response
         if (!res.headersSent) {

@@ -1,6 +1,4 @@
 const aiService = require('../services/ai.service');
-const logger = require('../utils/logger');
-const { asyncErrorHandler } = require('../middleware/logging');
 const { v4: uuidv4 } = require('uuid');
 
 // Helper function to get user IP
@@ -13,19 +11,16 @@ function getUserIP(req) {
            'unknown';
 }
 
-module.exports.getResponse = asyncErrorHandler(async (req, res) => {
+module.exports.getResponse = async (req, res) => {
     const requestId = uuidv4();
-    logger.info('Processing AI request', { requestId, endpoint: 'POST /ai/get-response' });
+    console.log(`Processing AI request - RequestId: ${requestId}, Endpoint: POST /ai/get-response`);
     
     try {
         const code = req.body.prompt;
 
         if(!code){
-            logger.warn('Invalid request: missing prompt', { 
-                requestId,
-                userIP: getUserIP(req),
-                body: req.body 
-            });
+            const userIP = getUserIP(req);
+            console.log(`Invalid request: missing prompt - RequestId: ${requestId}, UserIP: ${userIP}, Body:`, req.body);
             
             return res.status(400).json({ 
                 success: false,
@@ -40,22 +35,11 @@ module.exports.getResponse = asyncErrorHandler(async (req, res) => {
         const userAgent = req.headers['user-agent'] || '';
         const sessionId = req.headers['x-session-id'] || req.body.sessionId || uuidv4();
 
-        logger.info('Processing code analysis', {
-            requestId,
-            userIP,
-            sessionId,
-            codeLength: code.length,
-            userAgent: userAgent.substring(0, 100)
-        });
+        console.log(`Processing code analysis - RequestId: ${requestId}, UserIP: ${userIP}, SessionId: ${sessionId}, CodeLength: ${code.length}, UserAgent: ${userAgent.substring(0, 100)}`);
 
         const response = await aiService(code, userIP, userAgent, sessionId);
 
-        logger.success('AI request completed successfully', {
-            requestId,
-            userIP,
-            sessionId,
-            responseLength: response.length
-        });
+        console.log(`AI request completed successfully - RequestId: ${requestId}, UserIP: ${userIP}, SessionId: ${sessionId}, ResponseLength: ${response.length}`);
 
         res.json({
             success: true,
@@ -66,13 +50,9 @@ module.exports.getResponse = asyncErrorHandler(async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('AI controller error', {
-            requestId,
-            error: error.message,
-            stack: error.stack,
-            userIP: getUserIP(req),
-            endpoint: 'POST /ai/get-response'
-        });
+        const userIP = getUserIP(req);
+        console.error(`AI controller error - RequestId: ${requestId}, Error: ${error.message}, UserIP: ${userIP}, Endpoint: POST /ai/get-response`);
+        console.error(`Stack trace:`, error.stack);
         
         res.status(500).json({ 
             success: false,
@@ -81,4 +61,4 @@ module.exports.getResponse = asyncErrorHandler(async (req, res) => {
             requestId
         });
     }
-});
+};

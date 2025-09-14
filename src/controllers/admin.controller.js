@@ -1,15 +1,13 @@
 const CodeInteraction = require('../models/CodeInteraction');
-const logger = require('../utils/logger');
-const { asyncErrorHandler } = require('../middleware/logging');
 const { v4: uuidv4 } = require('uuid');
 
 // Get statistics about stored interactions
-module.exports.getStats = asyncErrorHandler(async (req, res) => {
+module.exports.getStats = async (req, res) => {
     const requestId = uuidv4();
-    logger.info('Processing admin stats request', { requestId, endpoint: 'GET /admin/stats' });
+    console.log(`Processing admin stats request - RequestId: ${requestId}, Endpoint: GET /admin/stats`);
     
     try {
-        logger.logDatabaseOperation('aggregate', 'code_interactions', { operation: 'getStats' });
+        console.log(`Database operation: aggregate on code_interactions for getStats - RequestId: ${requestId}`);
         
         const totalInteractions = await CodeInteraction.countDocuments();
         const uniqueIPs = await CodeInteraction.distinct('userIP');
@@ -47,15 +45,7 @@ module.exports.getStats = asyncErrorHandler(async (req, res) => {
             averageResponseTime: avgResponseTime[0]?.avgTime || 0
         };
 
-        logger.success('Admin stats retrieved successfully', {
-            requestId,
-            statsGenerated: {
-                totalInteractions,
-                uniqueUsers: uniqueIPs.length,
-                todayInteractions,
-                languageStatsCount: languageStats.length
-            }
-        });
+        console.log(`Admin stats retrieved successfully - RequestId: ${requestId}, TotalInteractions: ${totalInteractions}, UniqueUsers: ${uniqueIPs.length}, TodayInteractions: ${todayInteractions}, LanguageStatsCount: ${languageStats.length}`);
 
         res.json({
             success: true,
@@ -64,12 +54,8 @@ module.exports.getStats = asyncErrorHandler(async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        logger.error('Admin stats error', {
-            requestId,
-            error: error.message,
-            stack: error.stack,
-            endpoint: 'GET /admin/stats'
-        });
+        console.error(`Admin stats error - RequestId: ${requestId}, Error: ${error.message}, Endpoint: GET /admin/stats`);
+        console.error(`Stack trace:`, error.stack);
         
         res.status(500).json({ 
             success: false,
@@ -78,28 +64,19 @@ module.exports.getStats = asyncErrorHandler(async (req, res) => {
             requestId
         });
     }
-});
+};
 
 // Get recent interactions (with pagination)
-module.exports.getRecentInteractions = asyncErrorHandler(async (req, res) => {
+module.exports.getRecentInteractions = async (req, res) => {
     const requestId = uuidv4();
-    logger.info('Processing admin recent interactions request', { 
-        requestId, 
-        endpoint: 'GET /admin/interactions',
-        query: req.query 
-    });
+    console.log(`Processing admin recent interactions request - RequestId: ${requestId}, Endpoint: GET /admin/interactions, Query:`, req.query);
     
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        logger.logDatabaseOperation('find', 'code_interactions', { 
-            operation: 'getRecentInteractions', 
-            page, 
-            limit, 
-            skip 
-        });
+        console.log(`Database operation: find on code_interactions for getRecentInteractions - RequestId: ${requestId}, Page: ${page}, Limit: ${limit}, Skip: ${skip}`);
 
         const interactions = await CodeInteraction.find()
             .sort({ timestamp: -1 })
@@ -111,13 +88,7 @@ module.exports.getRecentInteractions = asyncErrorHandler(async (req, res) => {
         const total = await CodeInteraction.countDocuments();
         const totalPages = Math.ceil(total / limit);
 
-        logger.success('Recent interactions retrieved successfully', {
-            requestId,
-            interactionsFound: interactions.length,
-            page,
-            totalPages,
-            totalItems: total
-        });
+        console.log(`Recent interactions retrieved successfully - RequestId: ${requestId}, InteractionsFound: ${interactions.length}, Page: ${page}, TotalPages: ${totalPages}, TotalItems: ${total}`);
 
         res.json({
             success: true,
@@ -139,13 +110,8 @@ module.exports.getRecentInteractions = asyncErrorHandler(async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        logger.error('Recent interactions error', {
-            requestId,
-            error: error.message,
-            stack: error.stack,
-            endpoint: 'GET /admin/interactions',
-            query: req.query
-        });
+        console.error(`Recent interactions error - RequestId: ${requestId}, Error: ${error.message}, Endpoint: GET /admin/interactions, Query:`, req.query);
+        console.error(`Stack trace:`, error.stack);
         
         res.status(500).json({ 
             success: false,
@@ -154,17 +120,12 @@ module.exports.getRecentInteractions = asyncErrorHandler(async (req, res) => {
             requestId
         });
     }
-});
+};
 
 // Get interactions by IP
-module.exports.getInteractionsByIP = asyncErrorHandler(async (req, res) => {
+module.exports.getInteractionsByIP = async (req, res) => {
     const requestId = uuidv4();
-    logger.info('Processing admin interactions by IP request', { 
-        requestId, 
-        endpoint: 'GET /admin/interactions/ip/:ip',
-        targetIP: req.params.ip,
-        query: req.query 
-    });
+    console.log(`Processing admin interactions by IP request - RequestId: ${requestId}, Endpoint: GET /admin/interactions/ip/:ip, TargetIP: ${req.params.ip}, Query:`, req.query);
     
     try {
         const { ip } = req.params;
@@ -172,13 +133,7 @@ module.exports.getInteractionsByIP = asyncErrorHandler(async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        logger.logDatabaseOperation('find', 'code_interactions', { 
-            operation: 'getInteractionsByIP', 
-            targetIP: ip,
-            page, 
-            limit, 
-            skip 
-        });
+        console.log(`Database operation: find on code_interactions for getInteractionsByIP - RequestId: ${requestId}, TargetIP: ${ip}, Page: ${page}, Limit: ${limit}, Skip: ${skip}`);
 
         const interactions = await CodeInteraction.find({ userIP: ip })
             .sort({ timestamp: -1 })
@@ -188,13 +143,7 @@ module.exports.getInteractionsByIP = asyncErrorHandler(async (req, res) => {
 
         const total = await CodeInteraction.countDocuments({ userIP: ip });
 
-        logger.success('Interactions by IP retrieved successfully', {
-            requestId,
-            targetIP: ip,
-            interactionsFound: interactions.length,
-            totalForIP: total,
-            page
-        });
+        console.log(`Interactions by IP retrieved successfully - RequestId: ${requestId}, TargetIP: ${ip}, InteractionsFound: ${interactions.length}, TotalForIP: ${total}, Page: ${page}`);
 
         res.json({
             success: true,
@@ -212,14 +161,8 @@ module.exports.getInteractionsByIP = asyncErrorHandler(async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        logger.error('IP interactions error', {
-            requestId,
-            targetIP: req.params.ip,
-            error: error.message,
-            stack: error.stack,
-            endpoint: 'GET /admin/interactions/ip/:ip',
-            query: req.query
-        });
+        console.error(`IP interactions error - RequestId: ${requestId}, TargetIP: ${req.params.ip}, Error: ${error.message}, Endpoint: GET /admin/interactions/ip/:ip, Query:`, req.query);
+        console.error(`Stack trace:`, error.stack);
         
         res.status(500).json({ 
             success: false,
@@ -228,4 +171,4 @@ module.exports.getInteractionsByIP = asyncErrorHandler(async (req, res) => {
             requestId
         });
     }
-});
+};
